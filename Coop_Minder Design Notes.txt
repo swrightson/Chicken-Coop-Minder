@@ -1,0 +1,128 @@
+Coop Minder Project Design Notes
+Shaun Wrightson
+October 12, 2020
+
+Scope of Work:
+	-Central Control will be via the Sparkfun ESP32 Thing Plus WROOM
+	-A Stepper Motor and driver will raise and lower the pop door at sunrise and sunset
+	-A door reed switch will monitor door closure state
+	-Two temperature sensors will monitor outdoor and interior coop temperature
+	-A power relay will control heat lamp on/off state based on interior coop temperature
+
+Logic Tree:
+Is it after sunset? 	Yes		Is exterior temp below 60F?		Yes		Close pop door
+																No		Open pop door
+						No		Open pop door
+
+Is interior temp below 40F?		Yes		Turn on heat lamps
+								No		Turn off heat lamps
+
+TMP102 Notes:
+	-Qwiic TMP102 Hookup guide: https://learn.sparkfun.com/tutorials/tmp102-digital-temperature-sensor-hookup-guide
+	-Cut I2C traces on back of one board to disable pull-up resistors (since multiple devices on same bus)
+	-Also cut 0x48 trace on one of the boards and use a jumper to connect ALERT to 3V3 to achieve address 0x49
+	-Include Sparkfun TMP102 library in program
+	
+Stepper Motor and Adafruit DRV8833 Motor Driver Notes:
+	-DRV8833 Hookup guide: https://learn.adafruit.com/adafruit-drv8833-dc-stepper-motor-driver-breakout-board/overview
+	-Stepper motor Data Sheet: http://cdn.sparkfun.com/datasheets/Robotics/42BYGHM809.PDF
+		-3.06 VDC
+		-2-phase, 1.7 A per phase
+		-Phase conductor pairs are Black & Green, Red & Blue
+	-Stepper motor product page: https://www.sparkfun.com/products/10846
+	-Include built-in Arduino stepper library <Stepper.h>
+	-FLT is the Fault output, which will drive low if there's a thermal shutdown or overcurrent. 
+		-Note it is open drain so connect a pullup resistor to your desired logic voltage!
+	
+Door Sensor Notes:
+	-Circuit complete when pieces are within 20±5 mm (tested 10 17.5 mm)
+	-Can accept max voltage of 100 VDC at 500 mA
+	-Door sensor is not working reliably - can I do away with it entirely and rely on the precision of the stepper motor to ensure door fully open/closed status?
+	
+Heat Lamp Power Relay Notes:
+	-http://www.digital-loggers.com/iot2faqs.html
+	-Minimum 3.3 VDC and 0.2 mA must be applied to the IoT relay from the microcontroller.
+	-With the MCU relay unpowered, normally ON outlets will be ON, normally OFF outlets will be OFF
+	-Plug two heat lamps into two Normally OFF outlets. Apply a voltage (i.e. toggle pin HIGH) to activate lamps.
+		-Will lamps stay on if ESP32 enters sleep state?
+	
+Sparkfun ESP32 Thing Plus WROOM Notes:
+	-Product Page: https://www.sparkfun.com/products/15663
+	-Hookup Guide: https://learn.sparkfun.com/tutorials/esp32-thing-plus-hookup-guide
+	-Blynk Integration to report current time, interior and exterior temps, door state to Blynk iOS Applet
+		-Blynk Timer functionality does not seem to support working with "struct tm timeinfo", errors seem to indicate some kind of problem 
+		 parsing the tm structure specifically. Will need to convert relevant tm info into a basic integer to pass into the Blynk Timer 
+		 function for any kind of time comparison analysis
+	-How will the MCU obtain and store current time, sunset time, and sunrise time?
+		-See this site for explanation on using &timeinfo https://randomnerdtutorials.com/esp32-date-time-ntp-client-server-arduino/
+		-Dusk2Dawn arduino library is one candidate. Takes lat, long, UTC offset, year, month, day, and DST. But it does not play
+		 nicely with the ESP32 board definition.
+		-The sunset.h library is now the leading candidate for sun timing https://github.com/buelowp/sunset
+			-This library has been successfully tested on the Sparkfun ESP32 board and returned sunrise and sunset times matching
+			 those reported by Weather Underground app on iOS.
+		-Maybe include the <time.h> library which is the ESP32 native time library for graceful NTP server 
+		 synchronization https://lastminuteengineers.com/esp32-ntp-server-date-time-tutorial/
+	-Investigate ESP32 sleep modes so we don't draw power unnecessarily all day and night
+	 https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/
+		-Seems likely the light sleep mode will be appropriate for this project, although Modem Sleep may be necessary to ensure heat lamps
+		 do not turn off through relay when ESP32 is in low-power state.
+		-Maybe the whole system only needs to update every half-hour to check temps, check times, affect door state, send Blynk
+		 data, change relay states
+	-OTA Firmware updates will allow changing programming remotely. See https://lastminuteengineers.com/esp32-ota-updates-arduino-ide/
+	 for more information.
+	
+	
+Wiring Schematic:
+
+										_________________
+										|				|
+										|				|
+										23/SDA		   21----DRV8833\FLT GPIO21  <-- Connect pull-up resistor?? ??
+										22/SCL	   17/TX1----DRV8833\BIN1 GPIO17
+										14		   16/RX1----DRV8833\BIN2 GPIO16
+										32		  19/MISO----DRV8833\SLP GPIO19
+										15		  18/MOSI----DRV8833\AIN2 GPIO18
+										33			5/SCK----DRV8833\AIN1 GPIO5
+										27			   A5
+										12		E	   A4
+										13		S	   A3
+										VUSB	P	   A2
+										EN		3	   A1----DoorSwitch\+ GPIO25
+										VBAT	2	   A0----IoTRelay\+ GPIO26
+										|			  GND----IoTRelay\GND----DoorSwitch\GND----DRV8833\GND
+										}JST		   NC
+										|			  3V3
+	   TMP1012\Qwiic----TMP102\Qwiic----}Qwiic		RESET
+										|				|
+										|_____USB_______|
+											   |
+											   |
+											   |
+											 USB5VDC
+											 
+											 
+											 (5VDC,1-2A)
+											   |	|
+										 _________________
+										 |	   +   	-	 |
+										 VM	   Vmotor	 |
+					        ESP32\GND----GND			BS
+							ESP32\A9-----FLT	D		AS
+							ESP32\A4-----BIN1	R	 BOUT1----Stepper\Black
+							ESP32\A3-----BIN2	V	 BOUT2----Stepper\Green
+							ESP32\A2-----SLP	8	 AOUT2----Stepper\Red
+							ESP32\A1-----AIN2	8	 AOUT1----Stepper\Blue
+							ESP32\A0-----AIN1	3		 |
+										 |______3________|
+										
+Enclosure:
+	-Internal dimensions 120 mm wide, 80 mm high, 25 mm deep
+	-Provide mounting holes on exterior for mounting to wall
+	-Provide corner mounting holes on interior for affixing acrylic cover plate
+	-Provide wire passthroughs for ESP32 and Stepper power, IoTRelay and DoorSwitch conductors, Stepper Control and exterior temp qwiic
+	-Provide a foam-shrouded hole in acrylic cover plate for interior temp sensor
+	-Provide female headers at connections on boards, solder male-header strips to wire bundles for connections between boards/motor
+		-Need female header row of 9 (or 15), row of 7 (or 8), and row of 4 (or 6)
+		
+Reconnection debugging notes:
+	-Include a wifi reconnection function that gets called during the Blynk timer interval. It should determine whether the ESP32 is connected to the network, and if not, trigger a single reconnection attempt. If it doesn't work, it'll retry at the next Blynk timer interval.
