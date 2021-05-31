@@ -127,19 +127,16 @@ void myTimerEvent()                                                       // In 
   } else {
     doorState = "CLOSED";
   }
-  if (exteriorTemp < 45) {                                                // If outside temp less than 40F, turn on heat lamps.
+  if (exteriorTemp < 45) {                                                // If outside temp less than 45F, turn on heat lamps.
     digitalWrite(IoTRelay, HIGH);                                         // Writing IoTRelay HIGH turns on heat lamps.
   } else {
     digitalWrite(IoTRelay, LOW);                                          // Writing IoTRelay LOW turns heat lamps off.
   }
-  if ( (todayMinutes > sunrise) && (todayMinutes < (sunset + 60)) ) {     // If it's daytime (between sunrise and an hour after sunset)...
-    if (door != HIGH) {                                                   // ...and if the door is closed, open it.
-      doorMotor.step(4000);                                               // Set this to the number of revolutions needed to open door.
-    }
-  } else { // If it's nighttime and...
-    if (door == HIGH) {                                                   // ...if the door is open, close it.
-      doorMotor.step(-4000);                                              // Set this to the number of revolutions needed to close door.
-    }
+  if (((todayMinutes < sunrise) || (todayMinutes > (sunset + 60))) && door == HIGH) {  // If it's nighttime (before sunrise or after sunset) and if the door is open...
+    doorMotor.step(-4000);                                                             // ... close the door (4000 revolutions determined experimentally).
+  }
+  if ((todayMinutes > sunrise) && (todayMinutes < (sunset + 60)) && door != HIGH) {    // If it's daytime (after sunrise and before sunset) and if the door is closed...
+    doorMotor.step(4000);                                                              // ... open the door (4000 revolutions determined experimentally).
   }
   Blynk.virtualWrite(V0, timeStringBuff);
   Blynk.virtualWrite(V1, interiorTemp);
@@ -147,7 +144,7 @@ void myTimerEvent()                                                       // In 
   Blynk.virtualWrite(V3, doorState);
   interiorTMP102.sleep();
   exteriorTMP102.sleep();
-  //digitalWrite(DVR8833_SLP, LOW);                                       // This will cut power to the stepper motor, preventing overheating
+  //digitalWrite(DVR8833_SLP, LOW);                                       // This will cut power to the stepper motor, preventing overheating, but also drops door.
 }
 
 void loop()
