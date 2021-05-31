@@ -10,18 +10,17 @@ Scope of Work:
 	-A power relay will control heat lamp on/off state based on interior coop temperature
 
 Logic Tree:
-Is it after sunset? 	Yes		Is exterior temp below 60F?		Yes		Close pop door
-																No		Open pop door
-						No		Open pop door
+Is it after sunset? 	Yes:	Close pop door
+						No:		Open pop door
 
-Is interior temp below 40F?		Yes		Turn on heat lamps
-								No		Turn off heat lamps
+Is interior temp below 40F?		Yes:	Turn on heat lamps
+								No:		Turn off heat lamps
 
 TMP102 Notes:
 	-Qwiic TMP102 Hookup guide: https://learn.sparkfun.com/tutorials/tmp102-digital-temperature-sensor-hookup-guide
-	-Cut I2C traces on back of one board to disable pull-up resistors (since multiple devices on same bus)
+	-Cut I2C traces on back of one board to disable pull-up resistors (since multiple devices on same I2C bus)
 	-Also cut 0x48 trace on one of the boards and use a jumper to connect ALERT to 3V3 to achieve address 0x49
-	-Include Sparkfun TMP102 library in program
+	-Include Sparkfun TMP102 library in Arduino sketch
 	
 Stepper Motor and Adafruit DRV8833 Motor Driver Notes:
 	-DRV8833 Hookup guide: https://learn.adafruit.com/adafruit-drv8833-dc-stepper-motor-driver-breakout-board/overview
@@ -30,33 +29,33 @@ Stepper Motor and Adafruit DRV8833 Motor Driver Notes:
 		-2-phase, 1.7 A per phase
 		-Phase conductor pairs are Black & Green, Red & Blue
 	-Stepper motor product page: https://www.sparkfun.com/products/10846
-	-Include built-in Arduino stepper library <Stepper.h>
+	-Include built-in Arduino stepper library <Stepper.h> in Arduino sketch
 	-FLT is the Fault output, which will drive low if there's a thermal shutdown or overcurrent. 
 		-Note it is open drain so connect a pullup resistor to your desired logic voltage!
 	
 Door Sensor Notes:
-	-Circuit complete when pieces are within 20±5 mm (tested 10 17.5 mm)
+	-Circuit complete when pieces are within 20±5 mm (tested 10 to 17.5 mm)
 	-Can accept max voltage of 100 VDC at 500 mA
-	-Door sensor is not working reliably - can I do away with it entirely and rely on the precision of the stepper motor to ensure door fully open/closed status?
+	-Note for improvement: door sensor reed switch is not reporting to Blynk service reliably, suspect there is an error in programming method.
 	
 Heat Lamp Power Relay Notes:
 	-http://www.digital-loggers.com/iot2faqs.html
 	-Minimum 3.3 VDC and 0.2 mA must be applied to the IoT relay from the microcontroller.
 	-With the MCU relay unpowered, normally ON outlets will be ON, normally OFF outlets will be OFF
 	-Plug two heat lamps into two Normally OFF outlets. Apply a voltage (i.e. toggle pin HIGH) to activate lamps.
-		-Will lamps stay on if ESP32 enters sleep state?
+		-Will lamps stay on if ESP32 enters sleep state? Unanswered - not using ESP32 sleep or low-power states.
 	
 Sparkfun ESP32 Thing Plus WROOM Notes:
 	-Product Page: https://www.sparkfun.com/products/15663
 	-Hookup Guide: https://learn.sparkfun.com/tutorials/esp32-thing-plus-hookup-guide
-	-Blynk Integration to report current time, interior and exterior temps, door state to Blynk iOS Applet
+	-Blynk Integration to report current time, interior and exterior temps, door state to Blynk iOS applet
 		-Blynk Timer functionality does not seem to support working with "struct tm timeinfo", errors seem to indicate some kind of problem 
 		 parsing the tm structure specifically. Will need to convert relevant tm info into a basic integer to pass into the Blynk Timer 
 		 function for any kind of time comparison analysis
 	-How will the MCU obtain and store current time, sunset time, and sunrise time?
 		-See this site for explanation on using &timeinfo https://randomnerdtutorials.com/esp32-date-time-ntp-client-server-arduino/
 		-Dusk2Dawn arduino library is one candidate. Takes lat, long, UTC offset, year, month, day, and DST. But it does not play
-		 nicely with the ESP32 board definition.
+		 nicely with the ESP32 board definition. NOTE: Dusk2Dawn library not used in final build.
 		-The sunset.h library is now the leading candidate for sun timing https://github.com/buelowp/sunset
 			-This library has been successfully tested on the Sparkfun ESP32 board and returned sunrise and sunset times matching
 			 those reported by Weather Underground app on iOS.
@@ -121,8 +120,8 @@ Enclosure:
 	-Provide corner mounting holes on interior for affixing acrylic cover plate
 	-Provide wire passthroughs for ESP32 and Stepper power, IoTRelay and DoorSwitch conductors, Stepper Control and exterior temp qwiic
 	-Provide a foam-shrouded hole in acrylic cover plate for interior temp sensor
-	-Provide female headers at connections on boards, solder male-header strips to wire bundles for connections between boards/motor
-		-Need female header row of 9 (or 15), row of 7 (or 8), and row of 4 (or 6)
+	-Provide direct solder connections to PTH holes on ESP32 and motor driver boards.
+	-Used terminal strip (https://www.lowes.com/pd/Utilitech-Quick-Wire-Connectors/999953938 or similar) to gang the numerous ground wires required back to the single ESP32 dev board ground.
 		
 Reconnection debugging notes:
 	-Include a wifi reconnection function that gets called during the Blynk timer interval. It should determine whether the ESP32 is connected to the network, and if not, trigger a single reconnection attempt. If it doesn't work, it'll retry at the next Blynk timer interval.
